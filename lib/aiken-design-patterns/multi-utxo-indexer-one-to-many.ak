@@ -4,11 +4,13 @@ use aiken/crypto.{ScriptHash}
 use aiken/fuzz
 use aiken_design_patterns/stake_validator
 use aiken_design_patterns/utils
-use aiken_scott_utils/list as list_extra
+use aiken_scott_utils/list_extra
 use cardano/address.{Address, Credential, Script}
 use cardano/transaction.{
-  Input, NoDatum, Output, Redeemer, ScriptPurpose, Spend, Transaction,
-  placeholder,
+  Input, Output, Redeemer, ScriptPurpose, Spend, Transaction, placeholder,
+}
+use test_kit/fuzzy/fuzzer.{
+  data_fuzzer, data_hash_fuzzer, datum_fuzzer, script_hash_fuzzer,
 }
 
 /// Use this function inside your withdrawal script to validate all the inputs
@@ -341,62 +343,65 @@ fn tests_fuzzer() -> Fuzzer<
     Pairs<ScriptPurpose, Redeemer>,
   ),
 > {
-  let script_hash <- fuzz.and_then(fuzz.bytearray_fixed(28))
+  let script_hash <- fuzz.and_then(script_hash_fuzzer())
   let wallet_inputs <- fuzz.and_then(utils.user_inputs_fuzzer())
+
+  let datum <-
+    fuzz.and_then(
+      datum_fuzzer(
+        when_datum_hash: data_hash_fuzzer(),
+        when_inline_datum: data_fuzzer(),
+      ),
+    )
   let script_inputs <-
     fuzz.and_then(
       fuzz.list_between(
-        utils.specific_script_input_fuzzer(script_hash, NoDatum),
+        utils.specific_script_input_fuzzer(script_hash, datum),
         1,
         10,
       ),
     )
+
   let inputs = list.concat(wallet_inputs, script_inputs) |> utils.sort_inputs
-  let (script_input_indices, script_outputs) =
-    list.indexed_foldr(
-      inputs,
-      ([], []),
-      fn(i, input, acc) {
-        let (i_indices, outputs) = acc
-        when input.output.address.payment_credential is {
-          Script(_) ->
-            (
-              i_indices |> list.push(i),
-              outputs
-                |> list.push(input.output)
-                |> list.push(input.output)
-                |> list.push(input.output)
-                |> list.push(input.output)
-                |> list.push(input.output),
-            )
-          _ -> acc
-        }
-      },
-    )
-  let redeemer =
-    script_input_indices
-      |> list.indexed_foldr(
-          [],
-          fn(i, script_input_index, acc) {
-            list.push(
-              acc,
-              Pair(script_input_index, list.range(i * 5, i * 5 + 4)),
-            )
-          },
+  let (script_input_indices, script_outputs) = {
+    let i, input, acc <- list.indexed_foldr(inputs, ([], []))
+    let (i_indices, outputs) = acc
+    when input.output.address.payment_credential is {
+      Script(_) ->
+        (
+          i_indices |> list.push(i),
+          outputs
+            |> list.push(input.output)
+            |> list.push(input.output)
+            |> list.push(input.output)
+            |> list.push(input.output)
+            |> list.push(input.output),
         )
-  fuzz.constant(
-    (
-      script_hash,
-      inputs,
-      script_outputs,
-      redeemer,
-      list.length(script_inputs),
-      list.map(
-        script_inputs,
-        fn(i) { Pair(Spend(i.output_reference), builtin.i_data(0)) },
-      ),
-    ),
+      _ -> acc
+    }
+  }
+
+  let redeemer = {
+    let
+      i,
+      script_input_index,
+      acc,
+    <- list.indexed_foldr(script_input_indices, [])
+    acc |> list.push(Pair(script_input_index, list.range(i * 5, i * 5 + 4)))
+  }
+
+  (
+    script_hash,
+    inputs,
+    script_outputs,
+    redeemer,
+    list.length(script_inputs),
+    {
+      let i <- list.map(script_inputs)
+      Pair(i.output_reference |> Spend, 0 |> builtin.i_data)
+    },
   )
+    |> fuzz.constant
 }
 
 test success_withdraw_no_redeemer(test_values via tests_fuzzer()) {
@@ -408,6 +413,7 @@ test success_withdraw_no_redeemer(test_values via tests_fuzzer()) {
     _script_input_count,
     _redeemers,
   ) = test_values
+
   let tx =
     Transaction { ..placeholder, inputs: inputs, outputs: script_outputs }
   withdraw_no_redeemer(
@@ -430,6 +436,7 @@ test fail_withdraw_no_redeemer(test_values via tests_fuzzer()) fail {
     script_input_count,
     _redeemers,
   ) = test_values
+
   let tx = Transaction { ..placeholder, inputs: inputs, outputs: [] }
   withdraw_no_redeemer(
     fn(_ii, _i, _oi, _o) { True },
@@ -451,6 +458,7 @@ test success_withdraw_with_redeemer(test_values via tests_fuzzer()) {
     script_input_count,
     redeemers,
   ) = test_values
+
   let tx =
     Transaction {
       ..placeholder,
@@ -479,6 +487,7 @@ test fail_withdraw_with_redeemer(test_values via tests_fuzzer()) fail {
     script_input_count,
     _redeemers,
   ) = test_values
+
   let tx =
     Transaction { ..placeholder, inputs: inputs, outputs: [], redeemers: [] }
   withdraw_with_redeemer(

@@ -23,6 +23,7 @@ validator dependent_mint {
         prefix: destination_script_prefix,
         param: cbor.serialise(redeemer),
       )
+
     expect [
       Output {
         address: Address {
@@ -33,6 +34,7 @@ validator dependent_mint {
         ..
       },
     ] = outputs
+
     and {
       assets.without_lovelace(produced_value) == mint,
       destination_script_hash == target_script_hash,

@@ -1,9 +1,9 @@
 use aiken/collection/list
+use aiken/fuzz
 use aiken_design_patterns/utils
-use aiken_scott_utils/list as list_extra
-use cardano/transaction.{
-  Input, NoDatum, Output, OutputReference, Transaction, placeholder,
-}
+use aiken_scott_utils/list_extra
+use cardano/transaction.{OutputReference, Transaction}
+use test_kit/fuzzy/fuzzer.{data_fuzzer, data_hash_fuzzer, datum_fuzzer}
 
 /// Spend endpoint helper function. By including this in your validator, you'll
 /// an efficient access to your input, its corresponding outputs, total output
@@ -23,8 +23,15 @@ use cardano/transaction.{
 /// 2. Input index, `Input` itself, redeemer, and the list of all `Output`s
 ///    (this validation is executed only once)
 pub fn spend(
-  input_output_validator: fn(Int, Input, a, Int, Output) -> Bool,
-  input_collective_outputs_validator: fn(Int, Input, a, List<Output>) -> Bool,
+  input_output_validator: fn(Int, transaction.Input, a, Int, transaction.Output) ->
+    Bool,
+  input_collective_outputs_validator: fn(
+    Int,
+    transaction.Input,
+    a,
+    List<transaction.Output>,
+  ) ->
+    Bool,
   redeemer: a,
   input_index: Int,
   output_indices: List<Int>,
@@ -54,7 +61,7 @@ pub fn spend(
               redeemer,
               curr_ix,
               out_utxo,
-            )?
+            )
           return(curr_ix, list.push(outputs_acc, out_utxo))
         } else {
           fail @"Output indices must be in ascending order"
@@ -65,19 +72,23 @@ pub fn spend(
   // Indicated input must match the spending one.
   expect (own_ref == input.output_reference)?
 
-  input_collective_outputs_validator(input_index, input, redeemer, all_outputs)
+  input_collective_outputs_validator(input_index, input, redeemer, all_outputs)?
 }
 
 test success_spend(
-  script_hash_and_inputs via utils.inputs_with_an_authentic_script_input_fuzzer(
-    NoDatum,
+  script_hash_and_inputs via fuzz.and_then(
+    datum_fuzzer(
+      when_datum_hash: data_hash_fuzzer(),
+      when_inline_datum: data_fuzzer(),
+    ),
+    utils.inputs_with_an_authentic_script_input_fuzzer,
   ),
 ) {
   let (_script_hash, script_input, inputs) = script_hash_and_inputs
   let input_index = utils.find_index_of_first_script_input(inputs)
   let tx =
     Transaction {
-      ..placeholder,
+      ..transaction.placeholder,
       inputs: inputs,
       outputs: list.repeat(script_input.output, 10),
     }
@@ -94,13 +105,18 @@ test success_spend(
 }
 
 test fail_spend(
-  script_hash_and_inputs via utils.inputs_with_an_authentic_script_input_fuzzer(
-    NoDatum,
+  script_hash_and_inputs via fuzz.and_then(
+    datum_fuzzer(
+      when_datum_hash: data_hash_fuzzer(),
+      when_inline_datum: data_fuzzer(),
+    ),
+    utils.inputs_with_an_authentic_script_input_fuzzer,
   ),
 ) fail {
   let (_script_hash, script_input, inputs) = script_hash_and_inputs
   let input_index = utils.find_index_of_first_script_input(inputs)
-  let tx = Transaction { ..placeholder, inputs: inputs, outputs: [] }
+  let tx =
+    Transaction { ..transaction.placeholder, inputs: inputs, outputs: [] }
   spend(
     fn(_ii, _i, _r, _oi, _o) { True },
     fn(_ii, _i, _r, _os) { True },

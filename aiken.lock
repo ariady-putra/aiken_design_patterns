@@ -3,28 +3,33 @@
 
 [[requirements]]
 name = "aiken-lang/stdlib"
-version = "2.2.0"
+version = "v2.2.0"
 source = "github"
 
 [[requirements]]
 name = "aiken-lang/fuzz"
-version = "2.1.0"
+version = "v2.1.0"
 source = "github"
 
 [[requirements]]
 name = "keyan-m/aiken-scott-utils"
 version = "v1.3.0"
+source = "github"
+
+[[requirements]]
+name = "aiken-extra/test_kit"
+version = "hydrogen"
 source = "github"
 
 [[packages]]
 name = "aiken-lang/stdlib"
-version = "2.2.0"
+version = "v2.2.0"
 requirements = []
 source = "github"
 
 [[packages]]
 name = "aiken-lang/fuzz"
-version = "2.1.0"
+version = "v2.1.0"
 requirements = []
 source = "github"
 
@@ -34,4 +39,11 @@ version = "v1.3.0"
 requirements = []
 source = "github"
 
+[[packages]]
+name = "aiken-extra/test_kit"
+version = "hydrogen"
+requirements = []
+source = "github"
+
 [etags]
+"aiken-extra/test_kit@hydrogen" = [{ secs_since_epoch = 1736418334, nanos_since_epoch = 460833886 }, "33e017a71dbbd1094aee79842bd48e4b9396a9e1e6811d42a42ffd376853e282"]

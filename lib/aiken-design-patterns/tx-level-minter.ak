@@ -12,28 +12,29 @@
 
 use aiken/builtin
 use aiken/collection/dict.{Dict}
-use aiken/collection/list
 use aiken/collection/pairs
-use aiken/crypto.{blake2b_224}
+use aiken/crypto
 use aiken/fuzz
-use aiken_design_patterns/utils as utils
-use cardano/assets.{AssetName, PolicyId, Value}
-use cardano/transaction.{Mint, Redeemer, Transaction, placeholder}
+use aiken_design_patterns/utils
+use cardano/assets.{AssetName, PolicyId}
+use cardano/transaction.{Transaction}
+use test_kit/fuzzy/fuzzer.{script_hash_fuzzer}
 
 /// Function to be used under the spending endpoint of your validator. It looks
 /// at both the redeemers, and minted tokens to allow you validate both its
 /// redeemer, and its tokens getting minted/burnt.
 pub fn spend(
   mint_script_hash: PolicyId,
-  mint_redeemer_validator: fn(Redeemer) -> Bool,
+  mint_redeemer_validator: fn(transaction.Redeemer) -> Bool,
   mint_tokens_validator: fn(Dict<AssetName, Int>) -> Bool,
   tx: Transaction,
 ) -> Bool {
   let Transaction { mint, redeemers, .. } = tx
 
-  let mint_purpose = Mint(mint_script_hash)
+  let mint_purpose = transaction.Mint(mint_script_hash)
 
-  let mint_redeemer: Redeemer = redeemers |> pairs.get_first(mint_purpose)
+  let mint_redeemer: transaction.Redeemer =
+    redeemers |> pairs.get_first(mint_purpose)
 
   let tokens = mint |> assets.tokens(mint_script_hash)
 
@@ -49,17 +50,12 @@ pub fn spend_minimal(mint_script_hash: PolicyId, tx: Transaction) -> Bool {
   !(tx.mint |> assets.tokens(mint_script_hash) |> dict.is_empty)
 }
 
-fn grab_a_policy_from_mint(m: Value) -> Fuzzer<(PolicyId, Value)> {
-  let policies = m |> assets.policies
-  fuzz.map(
-    fuzz.int_between(0, list.length(policies) - 1),
-    fn(i) {
-      trace list.length(policies)
-      trace i
-      expect Some(p) = list.at(policies, i)
-      (p, m)
-    },
-  )
+fn grab_a_policy_from_mint(
+  mint: assets.Value,
+) -> Fuzzer<(PolicyId, assets.Value)> {
+  let policies = mint |> assets.policies
+  let (_, policy) <- fuzz.map(fuzz.pick(policies))
+  (policy, mint)
 }
 
 test success_spend(
@@ -69,13 +65,15 @@ test success_spend(
   ),
 ) {
   let (random_policy, random_mint) = random_policy_and_mint
+
   let tx =
     Transaction {
-      ..placeholder,
+      ..transaction.placeholder,
       mint: random_mint,
-      redeemers: [Pair(Mint(random_policy), builtin.i_data(0))],
+      redeemers: [Pair(random_policy |> transaction.Mint, 0 |> builtin.i_data)],
     }
-  spend(random_policy, fn(_r_data) { True }, fn(_tn_qty_dict) { True }, tx)
+
+  random_policy |> spend(fn(_r_data) { True }, fn(_tn_qty_dict) { True }, tx)
 }
 
 test fail_spend(
@@ -85,27 +83,38 @@ test fail_spend(
   ),
 ) {
   let (random_policy, random_mint) = random_policy_and_mint
+
   let tx =
     Transaction {
-      ..placeholder,
+      ..transaction.placeholder,
       mint: random_mint,
-      redeemers: [Pair(Mint(random_policy), builtin.i_data(0))],
+      redeemers: [Pair(random_policy |> transaction.Mint, 0 |> builtin.i_data)],
     }
   // Hashing to get a different policy
-  let hashed_policy = blake2b_224(random_policy)
-  spend(hashed_policy, fn(_r_data) { True }, fn(_tn_qty_dict) { True }, tx)
+  let hashed_policy = random_policy |> crypto.blake2b_224
+
+  hashed_policy |> spend(fn(_r_data) { True }, fn(_tn_qty_dict) { True }, tx)
 }
 
-test success_spend_minimal(script_hash via fuzz.bytearray_fixed(28)) {
+test success_spend_minimal(script_hash via script_hash_fuzzer()) {
   let tx =
-    Transaction { ..placeholder, mint: assets.from_asset(script_hash, #"", 1) }
-  spend_minimal(script_hash, tx)
+    Transaction {
+      ..transaction.placeholder,
+      mint: assets.from_asset(script_hash, #"", 1),
+    }
+
+  script_hash |> spend_minimal(tx)
 }
 
-test fail_spend_minimal(script_hash via fuzz.bytearray_fixed(28)) fail {
+test fail_spend_minimal(script_hash via script_hash_fuzzer()) fail {
   let tx =
-    Transaction { ..placeholder, mint: assets.from_asset(script_hash, #"", 1) }
+    Transaction {
+      ..transaction.placeholder,
+      mint: assets.from_asset(script_hash, #"", 1),
+    }
+
   // Hashing to get a different script hash
-  let expected_mint_script_hash = blake2b_224(script_hash)
-  spend_minimal(expected_mint_script_hash, tx)
+  let expected_mint_script_hash = script_hash |> crypto.blake2b_224
+
+  expected_mint_script_hash |> spend_minimal(tx)
 }

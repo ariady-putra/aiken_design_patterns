@@ -22,13 +22,13 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4.1.7
       - uses: aiken-lang/setup-aiken@v1.0.2
         with:
-          version: v1.1.7
+          version: v1.1.9
       - run: aiken fmt --check
-      - run: aiken check -D
-      - run: aiken build
+      - run: aiken c -D
+      - run: aiken b
       - run: aiken docs -o docs
       - run: git diff --name-only --exit-code aiken.lock
       - uses: actions/upload-pages-artifact@v2

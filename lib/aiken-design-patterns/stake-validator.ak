@@ -12,10 +12,10 @@
 use aiken/builtin
 use aiken/collection/pairs
 use aiken/crypto.{ScriptHash, blake2b_224}
-use aiken/fuzz
 use cardano/address.{Credential, Script}
 use cardano/assets.{Lovelace}
 use cardano/transaction.{Redeemer, Transaction, Withdraw, placeholder}
+use test_kit/fuzzy/fuzzer.{script_hash_fuzzer}
 
 /// Helper function for implementing validation for spending UTxOs, essentially
 /// delegating their requirements to the given withdrawal validator.
@@ -72,7 +72,7 @@ pub fn withdraw(
   withdrawal_logic(redeemer, own_validator, tx)
 }
 
-test success_spend(script_hash via fuzz.bytearray_fixed(28)) {
+test success_spend(script_hash via script_hash_fuzzer()) {
   let tx =
     Transaction {
       ..placeholder,
@@ -82,7 +82,7 @@ test success_spend(script_hash via fuzz.bytearray_fixed(28)) {
   spend(script_hash, fn(_r_data, _qty) { True }, tx)
 }
 
-test fail_spend(script_hash via fuzz.bytearray_fixed(28)) fail {
+test fail_spend(script_hash via script_hash_fuzzer()) fail {
   let spend_script = Script(script_hash)
   let tx =
     Transaction {
@@ -95,13 +95,13 @@ test fail_spend(script_hash via fuzz.bytearray_fixed(28)) fail {
   spend(expected_withdraw_script_hash, fn(_r_data, _qty) { True }, tx)
 }
 
-test success_spend_minimal(script_hash via fuzz.bytearray_fixed(28)) {
+test success_spend_minimal(script_hash via script_hash_fuzzer()) {
   let tx =
     Transaction { ..placeholder, withdrawals: [Pair(Script(script_hash), 0)] }
   spend_minimal(script_hash, tx)
 }
 
-test fail_spend_minimal(script_hash via fuzz.bytearray_fixed(28)) fail {
+test fail_spend_minimal(script_hash via script_hash_fuzzer()) fail {
   let spend_script = Script(script_hash)
   let tx = Transaction { ..placeholder, withdrawals: [Pair(spend_script, 0)] }
   // Hashing to get a different script hash
