@@ -3,17 +3,12 @@
 
 [[requirements]]
 name = "aiken-lang/stdlib"
-version = "v2.2.0"
+version = "2.2.0"
 source = "github"
 
 [[requirements]]
 name = "aiken-lang/fuzz"
-version = "v2.1.0"
-source = "github"
-
-[[requirements]]
-name = "keyan-m/aiken-scott-utils"
-version = "v1.3.0"
+version = "2.1.0"
 source = "github"
 
 [[requirements]]
@@ -23,19 +18,13 @@ source = "github"
 
 [[packages]]
 name = "aiken-lang/stdlib"
-version = "v2.2.0"
+version = "2.2.0"
 requirements = []
 source = "github"
 
 [[packages]]
 name = "aiken-lang/fuzz"
-version = "v2.1.0"
-requirements = []
-source = "github"
-
-[[packages]]
-name = "keyan-m/aiken-scott-utils"
-version = "v1.3.0"
+version = "2.1.0"
 requirements = []
 source = "github"
 
@@ -46,4 +35,4 @@ requirements = []
 source = "github"
 
 [etags]
-"aiken-extra/test_kit@helium" = [{ secs_since_epoch = 1736943623, nanos_since_epoch = 118379143 }, "8aeaede15f69f88f8eacc139d29696e0d7860b0e198debb21cdf082234d49d56"]
+"aiken-extra/test_kit@helium" = [{ secs_since_epoch = 1736943838, nanos_since_epoch = 163076261 }, "8aeaede15f69f88f8eacc139d29696e0d7860b0e198debb21cdf082234d49d56"]
