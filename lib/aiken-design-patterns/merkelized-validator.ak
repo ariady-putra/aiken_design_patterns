@@ -17,9 +17,12 @@
 use aiken/builtin
 use aiken/collection/pairs
 use aiken/crypto.{ScriptHash}
+use aiken/fuzz
 use aiken_design_patterns/utils
-use cardano/address
-use cardano/transaction.{ScriptPurpose}
+use cardano/address.{Script}
+use cardano/transaction.{Redeemer, ScriptPurpose, Withdraw}
+use test_kit.{to_data}
+use test_kit/fuzzy
 use test_kit/fuzzy/fuzzer.{script_hash_fuzzer}
 
 /// Datatype for redeemer of the "computation stake validator" to represent
@@ -58,13 +61,10 @@ pub fn delegated_compute(
   staking_validator: ScriptHash,
   input_data_coercer: fn(Data) -> a,
   output_data_coercer: fn(Data) -> b,
-  redeemers: Pairs<ScriptPurpose, transaction.Redeemer>,
+  redeemers: Pairs<ScriptPurpose, Redeemer>,
 ) -> b {
   expect Some(rdmr) =
-    redeemers
-      |> pairs.get_first(
-          staking_validator |> address.Script |> transaction.Withdraw,
-        )
+    redeemers |> pairs.get_first(staking_validator |> Script |> Withdraw)
   expect WithdrawRedeemerIO { input_arg, result }: WithdrawRedeemerIO<
     Data,
     Data,
@@ -86,13 +86,10 @@ pub fn delegated_validation(
   function_input: a,
   staking_validator: ScriptHash,
   input_data_coercer: fn(Data) -> a,
-  redeemers: Pairs<ScriptPurpose, transaction.Redeemer>,
+  redeemers: Pairs<ScriptPurpose, Redeemer>,
 ) -> Bool {
   expect Some(rdmr) =
-    redeemers
-      |> pairs.get_first(
-          staking_validator |> address.Script |> transaction.Withdraw,
-        )
+    redeemers |> pairs.get_first(staking_validator |> Script |> Withdraw)
   expect WithdrawRedeemer { input_arg }: WithdrawRedeemer<Data> = rdmr
 
   let coerced_input = input_data_coercer(input_arg)
@@ -100,6 +97,16 @@ pub fn delegated_validation(
   // Given input argument must be identical to the one provided to the
   // withdrawal validator.
   (coerced_input == function_input)?
+}
+
+pub fn generic_delegated_validation(
+  staking_validator: ScriptHash,
+  withdraw_redeemer_validator: fn(Data) -> Bool,
+  redeemers: Pairs<ScriptPurpose, Redeemer>,
+) -> Bool {
+  expect Some(rdmr) =
+    redeemers |> pairs.get_first(staking_validator |> Script |> Withdraw)
+  withdraw_redeemer_validator(rdmr)
 }
 
 /// Helper function for defining your "computation stake validator." The
@@ -130,90 +137,117 @@ fn data_to_ints(d: Data) -> List<Int> {
   ints
 }
 
-test success_delegated_compute(script_hash via script_hash_fuzzer()) {
-  let redeemer = WithdrawRedeemerIO([0, 1, 2, 3, 4], 30)
-  let redeemer_data: Data = redeemer
+test success_delegated_compute(
+  (i_list, script_hash) via fuzzy.tuple(
+    fuzz.list(fuzz.int()),
+    script_hash_fuzzer(),
+  ),
+) {
+  let sum = i_list |> utils.sum_of_squares
+  let redeemer = WithdrawRedeemerIO(i_list, sum)
   let result =
     delegated_compute(
-      [0, 1, 2, 3, 4],
+      i_list,
+      script_hash,
+      data_to_ints,
+      builtin.un_i_data,
+      [Pair(script_hash |> Script |> Withdraw, redeemer |> to_data)],
+    )
+  and {
+    result == sum,
+    withdraw_io(utils.sum_of_squares, redeemer),
+  }
+}
+
+test fail_delegated_compute(
+  (i_list, script_hash) via fuzzy.tuple(
+    fuzz.list(fuzz.int()),
+    script_hash_fuzzer(),
+  ),
+) fail {
+  let sum = i_list |> utils.sum_of_squares
+  let redeemer = WithdrawRedeemerIO(i_list, sum)
+  let result =
+    delegated_compute(
+      i_list,
       script_hash,
       data_to_ints,
       builtin.un_i_data,
       [
         Pair(
-          script_hash |> address.Script |> transaction.Withdraw,
-          redeemer_data,
+          script_hash |> crypto.blake2b_224 |> Script |> Withdraw,
+          redeemer |> to_data,
         ),
       ],
     )
   and {
-    result == 30,
+    result == sum,
     withdraw_io(utils.sum_of_squares, redeemer),
   }
 }
 
-test fail_delegated_compute(script_hash via script_hash_fuzzer()) fail {
-  let redeemer = WithdrawRedeemerIO([0, 1, 2, 3, 4], 30)
-  let redeemer_data: Data = redeemer
-  let result =
-    delegated_compute(
-      [0, 1, 2, 3, 4],
-      script_hash,
-      data_to_ints,
-      builtin.un_i_data,
-      [
-        Pair(
-          script_hash
-            |> crypto.blake2b_224
-            |> address.Script
-            |> transaction.Withdraw,
-          redeemer_data,
-        ),
-      ],
-    )
+test success_delegated_validation(
+  (i, script_hash) via fuzzy.tuple(fuzz.int(), script_hash_fuzzer()),
+) {
+  let redeemer = WithdrawRedeemer(i)
   and {
-    result == 30,
-    withdraw_io(utils.sum_of_squares, redeemer),
+    delegated_validation(
+      i,
+      script_hash,
+      builtin.un_i_data,
+      [Pair(script_hash |> Script |> Withdraw, redeemer |> to_data)],
+    ),
+    withdraw(fn(x: Int) { x == i }, redeemer),
   }
 }
 
-test success_delegated_validation(script_hash via script_hash_fuzzer()) {
-  let redeemer = WithdrawRedeemer(42)
-  let redeemer_data: Data = redeemer
+test fail_delegated_validation(
+  (i, script_hash) via fuzzy.tuple(fuzz.int(), script_hash_fuzzer()),
+) fail {
+  let redeemer = WithdrawRedeemer(i)
   and {
     delegated_validation(
-      42,
+      i,
       script_hash,
       builtin.un_i_data,
       [
         Pair(
-          script_hash |> address.Script |> transaction.Withdraw,
-          redeemer_data,
+          script_hash |> crypto.blake2b_224 |> Script |> Withdraw,
+          redeemer |> to_data,
         ),
       ],
     ),
-    withdraw(fn(x: Int) { x == 42 }, redeemer),
+    withdraw(fn(x: Int) { x == i }, redeemer),
   }
 }
 
-test fail_delegated_validation(script_hash via script_hash_fuzzer()) fail {
-  let redeemer = WithdrawRedeemer(42)
-  let redeemer_data: Data = redeemer
-  and {
-    delegated_validation(
-      42,
-      script_hash,
-      builtin.un_i_data,
-      [
-        Pair(
-          script_hash
-            |> crypto.blake2b_224
-            |> address.Script
-            |> transaction.Withdraw,
-          redeemer_data,
-        ),
-      ],
-    ),
-    withdraw(fn(x: Int) { x == 42 }, redeemer),
-  }
+test success_generic_delegated_validation(
+  (redeemer, script_hash) via fuzzy.tuple(fuzz.int(), script_hash_fuzzer()),
+) {
+  generic_delegated_validation(
+    script_hash,
+    fn(rdmr: Data) -> Bool {
+      expect i: Int = rdmr
+      i == redeemer
+    },
+    [Pair(script_hash |> Script |> Withdraw, redeemer |> to_data)],
+  )
+}
+
+test fail_generic_delegated_validation(
+  (redeemer, script_hash) via fuzzy.tuple(fuzz.int(), script_hash_fuzzer()),
+) fail {
+  generic_delegated_validation(
+    script_hash,
+    fn(rdmr: Data) -> Bool {
+      expect i: Int = rdmr
+      i == redeemer
+    },
+    [
+      Pair(
+        script_hash |> crypto.blake2b_224 |> Script |> Withdraw,
+        redeemer |> to_data,
+      ),
+    ],
+  )
 }

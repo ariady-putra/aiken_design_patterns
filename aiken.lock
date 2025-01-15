@@ -18,7 +18,7 @@ source = "github"
 
 [[requirements]]
 name = "aiken-extra/test_kit"
-version = "hydrogen"
+version = "helium"
 source = "github"
 
 [[packages]]
@@ -41,9 +41,9 @@ source = "github"
 
 [[packages]]
 name = "aiken-extra/test_kit"
-version = "hydrogen"
+version = "helium"
 requirements = []
 source = "github"
 
 [etags]
-"aiken-extra/test_kit@hydrogen" = [{ secs_since_epoch = 1736418334, nanos_since_epoch = 460833886 }, "33e017a71dbbd1094aee79842bd48e4b9396a9e1e6811d42a42ffd376853e282"]
+"aiken-extra/test_kit@helium" = [{ secs_since_epoch = 1736943623, nanos_since_epoch = 118379143 }, "8aeaede15f69f88f8eacc139d29696e0d7860b0e198debb21cdf082234d49d56"]
